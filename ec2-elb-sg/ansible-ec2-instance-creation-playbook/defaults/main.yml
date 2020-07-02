@@ -1,0 +1,16 @@
+---
+# defaults file for ansible-ec2
+
+# add instance requirments
+instance_type: t2.micro
+security_group: webservers_sg
+image: ami-9887c6e7
+keypair: ansible-ec2-us-east-1
+region: us-east-1
+count: 1
+
+# keep keys in ansible-vault to make more secure
+# this is not  recommend method 
+# Reference => https://docs.aws.amazon.com/general/latest/gr/managing-aws-access-keys.html
+aws_access_key: < your-access-key >
+aws_secret_key: < your-secret-key >

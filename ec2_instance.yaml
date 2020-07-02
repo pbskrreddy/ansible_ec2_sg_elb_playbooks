@@ -1,0 +1,333 @@
+---
+  - name: Provision an EC2 Instance
+    hosts: localhost
+    connection: local
+    gather_facts: False
+    tags: provisioning
+
+    vars:
+      instance_type: t2.micro
+      security_group: webservers
+      image: ami-0ac80df6eff0e70b5
+      region: us-east-1
+      keypair: Jenkins_master
+      count: 1
+
+    tasks:
+
+      - name: Create New security group with below given name
+        local_action:
+          module: ec2_group
+          name: "{{ security_group }}"
+          description: Security Group for Newly Created EC2 Instance
+          region: "{{ region }}"
+          rules:
+            - proto: tcp
+              from_port: 22
+              to_port: 22
+              cidr_ip: 0.0.0.0/0
+            - proto: tcp
+              from_port: 80
+              to_port: 80
+              cidr_ip: 0.0.0.0/0
+          rules_egress:
+            - proto: all
+              cidr_ip: 0.0.0.0/0
+
+
+      - name: Launch the new t2 micro EC2 Instance
+        local_action: ec2
+                      group={{ security_group }}
+                      instance_type={{ instance_type}}
+                      image={{ image }}
+                      wait=true
+                      region={{ region }}
+                      keypair={{ keypair }}
+                      count={{count}}
+                      
+        register: ec2
+
+      - name: Wait for EC2 Instance to Spin-up and ready for SSH access
+        local_action: wait_for
+                      host={{ item.public_ip }}
+                      port=22
+                      state=started
+        with_items: "{{ ec2.instances }}"
+
+      - name: Adding Tags to Identify
+        local_action: ec2_tag resource={{ item.id }} region={{ region }} state=present
+        with_items: "{{ ec2.instances }}"
+        args:
+          tags:
+            Name: Web Server
+            Owner: Bhaskar_Reddy
+            PurPose: Testing EC2 Instance From Ansible
+
+
+
+
+#####https://mindbowser.com/how-to-create-ec2-instances-using-ansible/
+
+- name: Ansible test
+  hosts: localhost
+  connection: local
+  gather_facts: False
+  tags: provisioning
+
+  # passing parameters
+  vars:
+    security_group: my_ec2_elb
+    
+  
+  tasks:
+  - name: launching AWS instance using Ansible
+    ec2:
+      key_name: Jenkins_master
+      instance_type: t2.micro
+      image: ami-0ac80df6eff0e70b5
+      region: us-east-1
+      wait: yes
+      count: 1
+      count_tag:
+            Name: EC2-A
+      instance_tags:
+            Name: EC2-A
+      vpc_subnet_id: subnet-01249c022cab0fe30
+      assign_public_ip: yes
+ 
+      user_data: |
+            #!/bin/bash -xe
+            sudo apt update -y && sudo apt install -y nginx 
+            echo "this is ELB on EC-A" > /var/www/html/index.html
+            sudo systemctl start nginx
+            sudo chkconfig nginx on
+    register: ec2
+
+
+  - name: launching AWS instance using Ansible
+    ec2:
+      key_name: Jenkins_master
+      instance_type: t2.micro
+      image: ami-0ac80df6eff0e70b5
+      region: us-east-1
+      wait: yes
+      count: 1
+      count_tag:
+            Name: EC2-B
+      instance_tags:
+            Name: EC2-B
+      vpc_subnet_id: subnet-01e330016f3d9577b
+      assign_public_ip: yes
+
+      user_data: |
+            #!/bin/bash -xe
+            sudo apt update -y && sudo apt install -y nginx 
+            echo "This is load balaner from EC2-B" > /var/www/html/index.html
+            sudo systemctl start nginx
+            sudo chkconfig nginx on
+    register: ec2
+
+
+  - name: Create a security group
+    local_action: 
+      module: ec2_group
+      name: "{{ security_group }}"
+      description: Security Group for Crunchify's EC2 Servers
+      region: "us-east-1"
+      rules:
+        - proto: tcp
+          from_port: 22
+          to_port: 22
+          cidr_ip: 0.0.0.0/0
+        - proto: tcp
+          from_port: 8080
+          to_port: 8080
+          cidr_ip: 0.0.0.0/0
+        - proto: tcp
+          from_port: 443
+          to_port: 443
+          cidr_ip: 0.0.0.0/0
+      rules_egress:
+        - proto: all
+          cidr_ip: 0.0.0.0/0
+    register: basic_firewall
+
+  - name: Create New security group with below given name
+        local_action:
+          module: ec2_group
+          name: "Jenkins_Master1"
+          description: Security Group for Newly Created EC2 Instance
+          region: "us-east-1"
+          rules:
+            - proto: tcp
+              from_port: 22
+              to_port: 22
+              cidr_ip: 0.0.0.0/0
+            - proto: tcp
+              from_port: 80
+              to_port: 80
+              cidr_ip: 0.0.0.0/0
+          rules_egress:
+            - proto: all
+              cidr_ip: 0.0.0.0/0
+
+  - name: creating a ELB
+    local_action:
+    module: ec2_elb_lb
+    name: "test-vpc"
+    scheme: internal
+    state: present
+    instance_ids:
+      - i-abcd1234
+    purge_instance_ids: true
+    subnets:
+      - subnet-abcd1234
+      - subnet-1a2b3c4d
+    listeners:
+      - protocol: http # options are http, https, ssl, tcp
+        load_balancer_port: 80
+        instance_port: 80
+
+
+####https://crunchify.com/how-to-create-start-and-configure-amazon-ec2-instance-using-simple-ansible-script-remotely-spawn-vm/####
+
+
+---
+  - name: Provision an EC2 Instance. Detailed steps by Crunchify.
+    hosts: localhost
+    connection: local
+    gather_facts: False
+    tags: provisioning
+
+    # required parameters
+    vars:
+      instance_type: t2.micro
+      security_group: crunchify_security_grp
+      image: ami-0ac80df6eff0e70b5
+      keypair: Jenkins_master
+      region: us-east-2 # Change the Region
+      count: 1
+ 
+    # Task that will be used to Launch/Create an EC2 Instance
+    tasks:
+ 
+      - name: Create a security group
+        local_action: 
+          module: ec2_group
+          name: "{{ security_group }}"
+          description: Security Group for Crunchify's EC2 Servers
+          region: "{{ region }}"
+          rules:
+            - proto: tcp
+              from_port: 22
+              to_port: 22
+              cidr_ip: 0.0.0.0/0
+            - proto: tcp
+              from_port: 8080
+              to_port: 8080
+              cidr_ip: 0.0.0.0/0
+            - proto: tcp
+              from_port: 443
+              to_port: 443
+              cidr_ip: 0.0.0.0/0
+          rules_egress:
+            - proto: all
+              cidr_ip: 0.0.0.0/0
+        register: basic_firewall
+        
+      - name: Launching Crunchify's the new EC2 Instance
+        local_action: ec2 
+                      group={{ security_group }} 
+                      instance_type={{ instance_type }} 
+                      image={{ image }} 
+                      wait=true
+                      wait_timeout=500 
+                      region={{ region }} 
+                      keypair={{ keypair }}
+                      count={{ count }}
+        register: ec2_crunchify
+ 
+      - name: Add the newly created EC2 instance(s) to the local host group
+        local_action: lineinfile 
+                      path=crunchify.txt
+                      regexp={{ item.public_ip }} 
+                      insertafter='\[crunchify\]' line={{ item.public_ip }}
+        with_items: '{{ ec2_crunchify.instances }}'
+ 
+      - name: Add new instance to Crunchify's host group
+        add_host:
+          hostname: "{{ item.public_ip }}"
+          groupname: launched
+        with_items: "{{ ec2_crunchify.instances }}"
+ 
+      - name: Let's wait for SSH to come up. Usually that takes ~10 seconds
+        local_action: wait_for 
+                      host={{ item.public_ip }} 
+                      port=22 
+                      state=started
+        with_items: '{{ ec2_crunchify.instances }}'
+ 
+      - name: Add tag to Instance(s)
+        local_action: ec2_tag resource={{ item.id }} region={{ region }} state=present
+        with_items: '{{ ec2_crunchify.instances }}'
+        args:
+          tags:
+            Name: crunchify
+
+
+- name: Create a sample web server's instance
+  hosts: localhost
+  gather_facts: False
+  vars:
+    keypair: Jenkins_master
+    instance_type: t2.micro
+    security_group: my_securitygroup
+    image: ami-0ac80df6eff0e70b5
+    region: us-east-1
+    count: 2
+  tasks:
+    - name: Launch instance
+      ec2:
+         key_name: "{{ keypair }}"
+         group: "{{ security_group }}"
+         instance_type: "{{ instance_type }}"
+         image: "{{ image }}"
+         wait: true
+         region: "{{ region }}"
+         count: "{{ count }}"
+         vpc_subnet_id: subnet-01249c022cab0fe30
+         assign_public_ip: yes
+         instance_tags:
+            Name: EC2-A
+         user_data: |
+            #!/bin/bash -xe
+            sudo apt update -y && sudo apt install -y nginx 
+            echo "This is load balaner from EC2-B" > /var/www/html/index.html
+            sudo systemctl start nginx
+            sudo chkconfig nginx on
+      register: ec2
+
+    - name: Create a security group
+      local_action: 
+        module: ec2_group
+        name: "{{ security_group }}"
+        description: Security Group for  EC2_ELB Servers
+        region: "{{ region }}"
+        rules:
+          - proto: tcp
+            from_port: 22
+            to_port: 22
+            cidr_ip: 0.0.0.0/0
+          - proto: tcp
+            from_port: 8080
+            to_port: 8080
+            cidr_ip: 0.0.0.0/0
+          - proto: tcp
+            from_port: 443
+            to_port: 443
+            cidr_ip: 0.0.0.0/0
+        rules_egress:
+          - proto: all
+            cidr_ip: 0.0.0.0/0
+      register: basic_firewall
+

@@ -1,0 +1,93 @@
+---
+- name: A simple  creating a security group and TWO ec2 instances.
+  hosts: localhost
+  connection: local
+  gather_facts: False
+  tasks:
+  - name: example using security group rule descriptions
+    ec2_group:
+      name: ram_sg
+      description: sg with rule descriptions
+      vpc_id: vpc-05fb5c9871a3dced8
+      region: us-east-1
+      rules:
+        - proto: tcp
+          from_port: 22
+          to_port: 22
+          cidr_ip: 0.0.0.0/0
+        - proto: tcp
+          from_port: 8080
+          to_port: 8080
+          cidr_ip: 0.0.0.0/0
+        - proto: tcp
+          ports:
+          - 80
+          cidr_ip: 0.0.0.0/0
+          rule_desc: allow all on port 80
+      rules_egress:
+        - proto: all
+          cidr_ip: 0.0.0.0/0
+    register: basic_firewall
+
+ - name: Create the ELB Only listening.
+   ec2_elb_lb:
+     state: present
+     name: 'New ELB'
+     security_group: 'ram_sg'
+     region: us-east-1
+     vpc_subnet_id:
+       - subnet-01249c022cab0fe30
+       - subnet-01e330016f3d9577b 
+     listeners:
+       - protocol: http
+         load_balancer_port: 80
+         instance_port: 80
+    register: elb
+  
+  - name: launching AWS instance using Ansible
+    ec2:
+      key_name: Jenkins_master
+      group: ram_sg
+      instance_type: t2.micro
+      image: ami-0ac80df6eff0e70b5
+      region: us-east-1
+      wait: yes
+      count: 1
+      count_tag:
+            Name: EC2-A
+      instance_tags:
+            Name: EC2-A
+      vpc_subnet_id: subnet-01249c022cab0fe30
+      assign_public_ip: yes
+ 
+      user_data: |
+            #!/bin/bash -xe
+            sudo apt update -y && sudo apt install -y nginx 
+            echo "This is EC2 Instance from EC2-A" > /var/www/html/index.html
+            sudo systemctl start nginx
+            sudo chkconfig nginx on
+    register: ec2
+
+  - name: launching AWS instance using Ansible
+    ec2:
+      key_name: Jenkins_master
+      group: ram_sg
+      instance_type: t2.micro
+      image: ami-0ac80df6eff0e70b5
+      region: us-east-1
+      wait: yes
+      count: 1
+      count_tag:
+            Name: EC2-B
+      instance_tags:
+            Name: EC2-B
+      vpc_subnet_id: subnet-01e330016f3d9577b
+      assign_public_ip: yes
+
+      user_data: |
+            #!/bin/bash -xe
+            sudo apt update -y && sudo apt install -y nginx 
+            echo "This is EC2 Instance from EC2-B" > /var/www/html/index.html
+            sudo systemctl start nginx
+            sudo chkconfig nginx on
+    register: ec2
